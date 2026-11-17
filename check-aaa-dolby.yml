@@ -1,0 +1,51 @@
+name: Avengers Hyderabad New Shows
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_notification:
+        description: 'Test phone notification without querying BookMyShow'
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: avengers-show-watch
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check new shows or send test notification
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TEST_NOTIFICATION: ${{ inputs.test_notification }}
+        run: |
+          if [ "$TEST_NOTIFICATION" = "true" ]; then
+            python monitor.py --test-notification
+          else
+            python monitor.py
+          fi
+      - name: Remember existing and alerted shows
+        if: ${{ always() && inputs.test_notification != true }}
+        run: |
+          if [ -f state/seen_shows.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state/seen_shows.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Update Avengers showtime monitoring state"
+              git push
+            fi
+          fi
